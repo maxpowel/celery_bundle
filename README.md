@@ -22,9 +22,10 @@ celery:
   broker: 'pyamqp://guest@localhost//'
   result_backend: 'redis://localhost:6379/1'
   debug: False
+  worker: True
 ```
 If you dont want a backend, just ignore the field. By default, debug mode is disable so you only to specify it if you want to
-enable it.
+enable it. The option 'worker' is useful when you want only clients that create tasks and only workers that execute tasks
 
 Registering tasks
 -----------------

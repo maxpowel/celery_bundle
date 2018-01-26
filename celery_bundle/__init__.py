@@ -13,6 +13,7 @@ class CeleryBundle(object):
                 "broker": 'pyamqp://guest@localhost//',
                 "result_backend": "",
                 "debug": False,
+                "worker": True
                 #"task_serializer": "json",
                 #"accept_content": ['json']
             }
@@ -40,23 +41,28 @@ class CeleryBundle(object):
             task_serializer='json',
             accept_content=['json'],  # Ignore other content
             result_serializer='json',
-            timezone='Europe/Oslo',
+            timezone='Europe/Madrid',
             enable_utc=True,
             task_acks_late=True
         )
-        argv = [
-            'worker',
-        ]
-        if config.celery.debug:
-            argv.append('--loglevel=DEBUG')
 
-        self.app.worker_main(argv)
+        if config.celery.worker:
+            argv = [
+                'worker',
+            ]
+            if config.celery.debug:
+                argv.append('--loglevel=DEBUG')
+
+            self.app.worker_main(argv)
+
 
     def event_listener(self, event):
-        # if isinstance(event, applauncher.kernel.InjectorReadyEvent):
-        #     bp = inject.instance(ApiResources)
-        #     bp.append((resources.HelloWorld, "/"))
-        #
+
         if isinstance(event, applauncher.kernel.KernelReadyEvent):
-            t = threading.Thread(target=self.start_sever)
-            t.start()
+            config = inject.instance(applauncher.kernel.Configuration).celery
+            if config.worker:
+                t = threading.Thread(target=self.start_sever)
+                t.start()
+            else:
+                self.start_sever()
+
