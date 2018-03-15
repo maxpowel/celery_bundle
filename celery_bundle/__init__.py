@@ -3,8 +3,11 @@ import applauncher.kernel
 import inject
 import threading
 from applauncher.kernel import Kernel
-from celery import Celery
+from celery import Celery, signals
 
+@signals.setup_logging.connect
+def setup_celery_logging(**kwargs):
+    pass
 
 class CeleryBundle(object):
     def __init__(self):
@@ -21,6 +24,7 @@ class CeleryBundle(object):
 
         zope.event.subscribers.append(self.event_listener)
         self.app = Celery()
+        self.app.log.setup()
         self.injection_bindings = {
              Celery: self.app
         }
@@ -57,7 +61,6 @@ class CeleryBundle(object):
 
 
     def event_listener(self, event):
-
         if isinstance(event, applauncher.kernel.KernelReadyEvent):
             config = inject.instance(applauncher.kernel.Configuration).celery
             if config.worker:
@@ -65,4 +68,5 @@ class CeleryBundle(object):
                 t.start()
             else:
                 self.start_sever()
+
 
