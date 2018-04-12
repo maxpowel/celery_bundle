@@ -2,7 +2,7 @@ from distutils.core import setup
 setup(
   name='celery_bundle',
   packages=['celery_bundle'],
-  version='1.13',
+  version='1.14',
   description='celery support for applauncher',
   author='Alvaro Garcia Gomez',
   author_email='maxpowel@gmail.com',

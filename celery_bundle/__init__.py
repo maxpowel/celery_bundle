@@ -1,7 +1,6 @@
 import zope.event
 import applauncher.kernel
 import inject
-import threading
 from applauncher.kernel import Kernel
 from celery import Celery, signals
 
@@ -31,6 +30,7 @@ class CeleryBundle(object):
 
     @inject.params(config=applauncher.kernel.Configuration)
     def start_sever(self, config):
+        print("DENTRO")
         # Register mappings
         kernel = inject.instance(Kernel)
         for bundle in kernel.bundles:
@@ -59,14 +59,14 @@ class CeleryBundle(object):
 
             self.app.worker_main(argv)
 
-
-    def event_listener(self, event):
+    @inject.params(kernel=Kernel)
+    def event_listener(self, event, kernel):
         if isinstance(event, applauncher.kernel.KernelReadyEvent):
             config = inject.instance(applauncher.kernel.Configuration).celery
             if config.worker:
-                t = threading.Thread(target=self.start_sever)
-                t.start()
+                kernel.run_service(self.start_sever)
             else:
                 self.start_sever()
-
+        elif isinstance(event, applauncher.kernel.KernelShutdownEvent):
+            self.app.control.shutdown()
 
