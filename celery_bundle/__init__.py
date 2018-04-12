@@ -30,7 +30,6 @@ class CeleryBundle(object):
 
     @inject.params(config=applauncher.kernel.Configuration)
     def start_sever(self, config):
-        print("DENTRO")
         # Register mappings
         kernel = inject.instance(Kernel)
         for bundle in kernel.bundles:
