@@ -1,0 +1,16 @@
+language: python
+python:
+- '2.7'
+- '3.6'
+env:
+  global:
+  - PYTHONPATH="."
+script: python celery_bundle/test/test_bundle.py
+deploy:
+  provider: pypi
+  user: maxpowel
+  password:
+    secure: gq7y5/el7OtIWpBsX7xr4oe/5ra/PXxJOYIOzdmLdFk+hqTZhppAcJriiA4sOtZDNmcEceVTHEhSYsoQf1JZOVS3jiYaYpx48CdLkS7yFqYRT8KtJEul053F9hiUW3oLDnt+F/24RegDXIH8TqZNhGDbJHd80xti4G845X0PuZQY0iW50GifupNP2FCU3ulSxHyqY7rGALjqDlCXutMsUXgpsps4e0IRLolXS84u0Hz+0r9W7FzzTxLbqrvjrxWlKg7uS3FkCIoxz7ELaXUcUMpMEKNHNjHqqrsxWw6LgjQ3rVYFq22lTMIdIIINiLc5uMHEOvVnUwQC6Str67YsJpXh6oCaNutbtFEbg7mL/7gRZgyI2R51FU0t/Fr74e+YtgQsQ8zJtwWteAYVh9BR5QkwU1rsQoLyvdEA0UbbFiCt0HxVUd7hzBITwznfSQmf8XyOPPR5jTuDnkwdzR7831PSeC9VnhqNACvJxUwxOYNQ0+d1a+Qcj001TkRghq3/EiFi+hr4XgK2Z8qIIfbnf+UmA+CMl0FHSnFwvVseOdWZ0CDWTiOdiZBtNSSzbTJX7C0128zE8JAhaDKrbEnyuzY9RPH9lPYwrj4WGEep4Uzy3cMV7Wtyn9DoFM8f5Lx0lDHXCB/AdVFf/UzIb2qSKvJOk8dYTDuxGgZK+55o740=
+  distributions: bdist_wheel
+  on:
+    tags: true
