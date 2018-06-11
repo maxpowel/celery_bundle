@@ -1,8 +1,7 @@
-import zope.event
-import applauncher.kernel
-import inject
+from applauncher.kernel import KernelReadyEvent, KernelShutdownEvent, Configuration
 from applauncher.kernel import Kernel
 from celery import Celery, signals
+import inject
 
 @signals.setup_logging.connect
 def setup_celery_logging(**kwargs):
@@ -21,14 +20,18 @@ class CeleryBundle(object):
             }
         }
 
-        zope.event.subscribers.append(self.event_listener)
+        self.event_listeners = [
+            (KernelReadyEvent, self.kernel_ready),
+            (KernelShutdownEvent, lambda e: self.app.control.shutdown())
+        ]
+
         self.app = Celery()
         self.app.log.setup()
         self.injection_bindings = {
              Celery: self.app
         }
 
-    @inject.params(config=applauncher.kernel.Configuration)
+    @inject.params(config=Configuration)
     def start_sever(self, config):
         # Register mappings
         kernel = inject.instance(Kernel)
@@ -59,13 +62,11 @@ class CeleryBundle(object):
             self.app.worker_main(argv)
 
     @inject.params(kernel=Kernel)
-    def event_listener(self, event, kernel):
-        if isinstance(event, applauncher.kernel.KernelReadyEvent):
-            config = inject.instance(applauncher.kernel.Configuration).celery
-            if config.worker:
-                kernel.run_service(self.start_sever)
-            else:
-                self.start_sever()
-        elif isinstance(event, applauncher.kernel.KernelShutdownEvent):
-            self.app.control.shutdown()
+    def kernel_ready(self, event, kernel):
+        config = inject.instance(Configuration).celery
+        if config.worker:
+            kernel.run_service(self.start_sever)
+        else:
+            self.start_sever()
+
 

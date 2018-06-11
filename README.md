@@ -1,4 +1,7 @@
 # Celery bundle for AppLauncher
+
+[![Build Status](https://travis-ci.org/applauncher-team/celery_bundle.svg?branch=master)](https://travis-ci.org/applauncher-team/celery_bundle)
+
 Celery support for applauncher
 
 Installation
