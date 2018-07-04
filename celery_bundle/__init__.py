@@ -9,14 +9,21 @@ def setup_celery_logging(**kwargs):
 
 class CeleryBundle(object):
     def __init__(self):
+
+
         self.config_mapping = {
             "celery": {
                 "broker": 'pyamqp://guest@localhost//',
                 "result_backend": "",
                 "debug": False,
-                "worker": True
-                #"task_serializer": "json",
-                #"accept_content": ['json']
+                "worker": True,
+                "queues": ["celery"],
+                "task_routes": [{
+                    "pattern": None,
+                    "queue": None
+                }],
+                "task_serializer": "json",
+                "accept_content": ['json']
             }
         }
 
@@ -52,12 +59,22 @@ class CeleryBundle(object):
             task_acks_late=True
         )
 
+        if len(config.celery.task_routes) > 0:
+            task_routes = {}
+            for route in config.celery.task_routes:
+                task_routes[route.pattern] = route.queue
+            self.app.conf.update({"task_routes": task_routes})
+
         if config.celery.worker:
             argv = [
                 'worker',
             ]
             if config.celery.debug:
                 argv.append('--loglevel=DEBUG')
+
+            if len(config.celery.queues) > 0:
+                argv.append("-Q")
+                argv.append(",".join(config.celery.queues))
 
             self.app.worker_main(argv)
 
@@ -68,5 +85,6 @@ class CeleryBundle(object):
             kernel.run_service(self.start_sever)
         else:
             self.start_sever()
+
 
 
