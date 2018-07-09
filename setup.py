@@ -6,7 +6,7 @@ with open('requirements.txt') as fp:
 setup(
   name='celery_bundle',
   packages=['celery_bundle'],
-  version='1.16',
+  version='1.17',
   description='Celery support for applauncher',
   author='Alvaro Garcia Gomez',
   author_email='maxpowel@gmail.com',
