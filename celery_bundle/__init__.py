@@ -23,7 +23,8 @@ class CeleryBundle(object):
                     "queue": None
                 }],
                 "task_serializer": "json",
-                "accept_content": ['json']
+                "accept_content": ['json'],
+                "concurrency": 0
             }
         }
 
@@ -76,6 +77,9 @@ class CeleryBundle(object):
                 argv.append("-Q")
                 argv.append(",".join(config.celery.queues))
 
+            if config.celery.concurrency > 0:
+                argv.append("--concurrency={concurrency}".format(concurrency=config.celery.concurrency))
+
             self.app.worker_main(argv)
 
     @inject.params(kernel=Kernel)
@@ -85,6 +89,7 @@ class CeleryBundle(object):
             kernel.run_service(self.start_sever)
         else:
             self.start_sever()
+
 
 
 
