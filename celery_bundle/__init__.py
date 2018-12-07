@@ -24,7 +24,11 @@ class CeleryBundle(object):
                 }],
                 "task_serializer": "json",
                 "accept_content": ['json'],
-                "concurrency": 0
+                "result_serializer": ['json'],
+                "result_expires": 3600, # 1 hour
+                "timezone": 'Europe/Madrid',
+                "concurrency": 0,
+                "worker_max_tasks_per_child": -1,
             }
         }
 
@@ -47,17 +51,22 @@ class CeleryBundle(object):
             if hasattr(bundle, "register_tasks"):
                 getattr(bundle, "register_tasks")()
 
+        tasks_per_child = config.celery.worker_max_tasks_per_child
+        if tasks_per_child == -1:
+            tasks_per_child = None
+            
         self.app.conf.update(
             broker_url=config.celery.broker,
             result_backend=config.celery.result_backend,
             task_track_started=True,
-            result_expires=3600, # 1 hour
-            task_serializer='json',
-            accept_content=['json'],  # Ignore other content
-            result_serializer='json',
-            timezone='Europe/Madrid',
+            result_expires=config.celery.result_expires,
+            task_serializer=config.celery.task_serializer,
+            accept_content=config.celery.accept_content,  # Ignore other content
+            result_serializer=config.celery.task_serializer,
+            timezone=config.celery.task_serializer.timezone,
             enable_utc=True,
-            task_acks_late=True
+            task_acks_late=True,
+            worker_max_tasks_per_child=tasks_per_child
         )
 
         if len(config.celery.task_routes) > 0:
