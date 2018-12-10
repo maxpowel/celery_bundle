@@ -17,14 +17,14 @@ class CeleryBundle(object):
                 "result_backend": "",
                 "debug": False,
                 "worker": True,
-                "queues": ["celery"],
+                "queues":  ["celery"],
                 "task_routes": [{
                     "pattern": None,
                     "queue": None
                 }],
                 "task_serializer": "json",
-                "accept_content": ['json'],
-                "result_serializer": ['json'],
+                "accept_content": ["json"],
+                "result_serializer": 'json',
                 "result_expires": 3600, # 1 hour
                 "timezone": 'Europe/Madrid',
                 "concurrency": 0,
@@ -50,11 +50,10 @@ class CeleryBundle(object):
         for bundle in kernel.bundles:
             if hasattr(bundle, "register_tasks"):
                 getattr(bundle, "register_tasks")()
-
         tasks_per_child = config.celery.worker_max_tasks_per_child
         if tasks_per_child == -1:
             tasks_per_child = None
-            
+
         self.app.conf.update(
             broker_url=config.celery.broker,
             result_backend=config.celery.result_backend,
@@ -63,7 +62,7 @@ class CeleryBundle(object):
             task_serializer=config.celery.task_serializer,
             accept_content=config.celery.accept_content,  # Ignore other content
             result_serializer=config.celery.task_serializer,
-            timezone=config.celery.task_serializer.timezone,
+            timezone=config.celery.timezone,
             enable_utc=True,
             task_acks_late=True,
             worker_max_tasks_per_child=tasks_per_child
@@ -98,6 +97,7 @@ class CeleryBundle(object):
             kernel.run_service(self.start_sever)
         else:
             self.start_sever()
+
 
 
 
