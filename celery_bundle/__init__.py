@@ -1,19 +1,27 @@
 from applauncher.kernel import KernelReadyEvent, KernelShutdownEvent, Configuration
 from applauncher.kernel import Kernel
 from celery import Celery, signals
+from celery.signals import celeryd_after_setup
 import inject
 
 @signals.setup_logging.connect
 def setup_celery_logging(**kwargs):
     pass
 
-class CeleryBundle(object):
-    def __init__(self):
 
+@celeryd_after_setup.connect
+def capture_worker_name(sender, instance, **kwargs):
+    CeleryBundle.worker_name = sender
+
+
+class CeleryBundle(object):
+    worker_name = None
+    def __init__(self):
 
         self.config_mapping = {
             "celery": {
                 "broker": 'pyamqp://guest@localhost//',
+                "name": "",
                 "result_backend": "",
                 "debug": False,
                 "worker": True,
@@ -34,7 +42,7 @@ class CeleryBundle(object):
 
         self.event_listeners = [
             (KernelReadyEvent, self.kernel_ready),
-            (KernelShutdownEvent, lambda e: self.app.control.shutdown())
+            (KernelShutdownEvent, lambda e: self.app.control.shutdown(destination=(CeleryBundle.worker_name,)))
         ]
 
         self.app = Celery()
@@ -85,6 +93,10 @@ class CeleryBundle(object):
                 argv.append("-Q")
                 argv.append(",".join(config.celery.queues))
 
+
+            argv.append("-n")
+            argv.append("{name}@%h".format(name=config.celery.name))
+
             if config.celery.concurrency > 0:
                 argv.append("--concurrency={concurrency}".format(concurrency=config.celery.concurrency))
 
@@ -97,8 +109,4 @@ class CeleryBundle(object):
             kernel.run_service(self.start_sever)
         else:
             self.start_sever()
-
-
-
-
 
