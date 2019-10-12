@@ -24,11 +24,37 @@ Configuration
 celery:
   broker: 'pyamqp://guest@localhost//'
   result_backend: 'redis://localhost:6379/1'
-  debug: False
   worker: True
 ```
-If you dont want a backend, just ignore the field. By default, debug mode is disable so you only to specify it if you want to
-enable it. The option 'worker' is useful when you want only clients that create tasks and only workers that execute tasks
+If you dont want a backend, just ignore the field. Set 'worker' to to True when this applauncher instance should run a worker, set it to False when 
+this instance should not execute tasks.
+
+The whole configuration options with the default values is:
+```yml
+celery:
+    broker: 'pyamqp://guest@localhost//'
+    name: ''
+    result_backend: ''
+    worker: True
+    queues:  [celery]
+    task_routes: []
+    task_serializer: json
+    accept_content: [json]
+    result_serializer: 'json'
+    result_expires: 3600 # 1 hour
+    timezone: 'Europe/Madrid'
+    concurrency: 0
+    worker_max_tasks_per_child: -1
+    broker_pool_limit: 1
+    broker_heartbeat: 0 # Disabled, put some greater value if you network is not good
+    broker_connection_timeout: 30
+    event_queue_expires: 60
+    worker_prefetch_multiplier: 1
+    quiet: True
+    without_gossip: True
+    without_mingle: True
+
+```
 
 Registering tasks
 -----------------
