@@ -1,2 +1,2 @@
 celery==4.3.0
-applauncher==1.43
+applauncher==1.44
