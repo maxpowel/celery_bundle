@@ -1,2 +1,2 @@
-celery==4.3.0
+celery==5.0.5
 applauncher==1.44

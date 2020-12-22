@@ -1,6 +1,6 @@
 from applauncher.kernel import KernelReadyEvent, KernelShutdownEvent, Configuration
 from applauncher.kernel import Kernel
-from celery import Celery, signals
+from celery import Celery, signals, concurrency
 from celery.signals import celeryd_after_setup
 import socket
 import inject
@@ -42,7 +42,8 @@ class CeleryBundle(object):
                 "worker_prefetch_multiplier": 1,
                 "quiet": True,
                 "without_gossip": True,
-                "without_mingle": True
+                "without_mingle": True,
+                "pool": "prefork"
             }
         }
 
@@ -50,10 +51,10 @@ class CeleryBundle(object):
             (KernelReadyEvent, self.kernel_ready),
             (KernelShutdownEvent, self.kernel_shutdown)
         ]
-        
+
         self.app = Celery()
         self.injection_bindings = {
-             Celery: self.app
+            Celery: self.app
         }
 
     @inject.params(config=Configuration)
@@ -99,37 +100,42 @@ class CeleryBundle(object):
 
         if config.celery.worker:
             self.logger.info("Starting worker")
+            pool_implementation = concurrency.get_implementation(config.celery.pool)
             params = {
-                'pool_cls': 'prefork', 
+                'pool_cls': None,
                 'quiet': True,
-                'detach': False, 
-                'optimization': None, 
-                'prefetch_multiplier': 1, 
+                'detach': False,
+                'optimization': 'default',
+                'prefetch_multiplier': 4,
                 'concurrency': config.celery.concurrency,
-                'pool': 'prefork', 
-                'task_events': True, 
-                'max_tasks_per_child': 50, 
-                'max_memory_per_child': None, 
-                'purge': False, 
-                'queues': ",".join(config.celery.queues),
-                'exclude_queues': [], 'include': [], 
+                'pool': pool_implementation,
+                'task_events': True,
+                'max_tasks_per_child': None,
+                'max_memory_per_child': None,
+                'purge': False,
+                'queues': config.celery.queues,
+                'exclude_queues': [], 'include': [],
                 'without_gossip': config.celery.without_gossip,
                 'without_mingle': config.celery.without_mingle,
                 'without_heartbeat': broker_hearthbeat is None,
                 'heartbeat_interval': broker_hearthbeat,
-                'autoscale': None, 
-                'umask': None, 
-                'executable': None, 
-                'beat': False, 
-                'schedule_filename': 'celerybeat-schedule', 
+                'autoscale': None,
+                'umask': None,
+                'executable': None,
+                'beat': False,
+                'schedule_filename': 'celerybeat-schedule',
                 'scheduler': None
             }
             if len(config.celery.name) == 0:
                 config.celery.name = socket.gethostname()
 
-            self.worker = self.app.Worker(hostname=f"{config.celery.name}@{socket.gethostname()}", **params)
-            self.logger.info("Worker started")
-            self.worker.start()
+            try:
+                self.worker = self.app.Worker(hostname=f"{config.celery.name}@{socket.gethostname()}", **params)
+                self.logger.info(f"Worker started using pool type {config.celery.pool} ({pool_implementation})")
+                self.worker.start()
+            except Exception as e:
+                logging.error(e)
+                raise e
         else:
             self.logger.info("Running as client only")
 
