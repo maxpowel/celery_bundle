@@ -7,76 +7,66 @@ Celery support for applauncher
 Installation
 -----------
 ```bash
-pip install celery_bundle 
+pip install celery-bundle 
 ```
 Then add to your main.py
 ```python
-import celery_bundle
+from applauncher import Kernel
+from celery_bundle.bundle import CeleryBundle
 
-bundle_list = [
-    celery_bundle.CeleryBundle(),
-]
+with Kernel(bundles=[CeleryBundle()], environment="PROD") as kernel:
+    CeleryBundle.start()
+    kernel.wait()
+
 ```
 
 Configuration
 -------------
 ```yml
 celery:
-  broker: 'pyamqp://guest@localhost//'
+  broker_url: 'pyamqp://guest@localhost//'
   result_backend: 'redis://localhost:6379/1'
-  worker: True
+  worker: true
+  task_queues:
+    - my_queue
+    - other_cue
+  include:
+    - 'my_package.tasks'
 ```
-If you dont want a backend, just ignore the field. Set 'worker' to to True when this applauncher instance should run a worker, set it to False when 
+If you dont want a backend, just ignore the field. Set 'worker' to True when this applauncher instance should run a worker, set it to False when 
 this instance should not execute tasks.
-
-The whole configuration options with the default values is:
-```yml
-celery:
-    broker: 'pyamqp://guest@localhost//'
-    name: ''
-    result_backend: ''
-    worker: True
-    queues:  [celery]
-    task_routes: []
-    task_serializer: json
-    accept_content: [json]
-    result_serializer: 'json'
-    result_expires: 3600 # 1 hour
-    timezone: 'Europe/Madrid'
-    concurrency: 0
-    worker_max_tasks_per_child: -1
-    broker_pool_limit: 1
-    broker_heartbeat: 0 # Disabled, put some greater value if you network is not good
-    broker_connection_timeout: 30
-    event_queue_expires: 60
-    worker_prefetch_multiplier: 1
-    quiet: True
-    without_gossip: True
-    without_mingle: True
-
-```
 
 Registering tasks
 -----------------
-Create a file for your tasks, for example "tasks.py" (you can create any files you want always you register it later)
+Create a file for your tasks, for example "tasks.py"
 
 ```python
-import inject
-from celery import Celery 
-app = inject.instance(Celery)
-
+from applauncher import ServiceContainer
+# Inject the celery application
+app = ServiceContainer.celery.app()
 
 @app.task
 def add(x, y):
     return x + y
-
 ```
+And then add it to the configuration (`include` field) providing the whole path (this path will be imported by celery)
 
-Then in your app application bundle, create the method "registe_tasks"
+Another option to register your tasks is by injecting and modifying the celery configuration. This method is useful
+when you want to get automatically registered your tasks, or you just want a cleaner config file.
+
 ```python
-class MyBundle(object):
-    def register_tasks(self):
-        import task
+from applauncher import ServiceContainer
+from applauncher.event import ConfigurationReadyEvent
+
+class MyBundle:
+    def __init__(self):
+        # First we subscribe to the configuration ready event
+        self.event_listeners = [
+            (ConfigurationReadyEvent, self.configuration_ready)
+        ]
+
+    def configuration_ready(self, event):
+        # Now we modify the celery config by appending my tasks path
+        # This works because a this point the injector is not configured yet
+        ServiceContainer.configuration().celery.include.append('my_bundle.tasks')
 ```
-The objective is to load the tasks after the kernel (indeed just the depenency injection) is ready. This method (register_tasks)
-will be called automatically by celery_bundle

@@ -1,9 +1,11 @@
-from applauncher.kernel import KernelReadyEvent, KernelShutdownEvent, Configuration
-from applauncher.kernel import Kernel
-from celery import Celery, signals, concurrency
-from celery.signals import celeryd_after_setup
-import socket
-import inject
+"""Main bundle functionalities. Config, container and boot process"""
+from pydantic import BaseModel
+from dependency_injector import containers, providers
+from applauncher.applauncher import Configuration
+from kombu import Queue
+from celery import Celery, signals
+from typing import List
+from multiprocessing import cpu_count
 import logging
 
 
@@ -13,142 +15,111 @@ def setup_celery_logging(**kwargs):
     return True
 
 
-class CeleryBundle(object):
+class CeleryConfig(BaseModel):
+    """More information about config here https://docs.celeryproject.org/en/latest/userguide/configuration.html"""
+    name: str = 'celery'
+    worker: bool = True
+    # Arguments
+    quiet: bool = True
+    without_gossip: bool = True
+    without_mingle: bool = True
+    pool: str = 'prefork'
+    # Parameters
+    broker_url: str = 'pyamqp://guest@localhost//'
+    task_queues: List[str] = ['default']
+    result_backend: str = None
+    task_serializer: str = 'json'
+    accept_content: List[str] = ['json']
+    result_serializer: str = 'json'
+    result_expires: int = 3600  # 1 hour
+    timezone: str = 'Europe/Madrid'
+    worker_concurrency: int = cpu_count() * 2
+    worker_max_tasks_per_child: int = None
+    broker_pool_limit: int = None
+    broker_heartbeat: int = 0  # Disabled, put some greater value if you network is not good
+    broker_connection_timeout: int = 30
+    event_queue_expires: int = None
+    worker_prefetch_multiplier: int = 1  # Increase it in case you have a lot of fast tasks
+    task_track_started: bool = True
+    enable_utc: bool = True
+    task_acks_late: bool = True
+    worker_send_task_events: bool = True
+    task_send_sent_event: bool = True
+    include: List[str] = []
+
+
+def create_client(config: CeleryConfig):
+    """Split bundle config from celery parameters and arguments"""
+    app = Celery(config.name)
+    celery_config = config.dict()
+    del celery_config['name']
+    del celery_config['worker']
+    del celery_config['quiet']
+    del celery_config['without_gossip']
+    del celery_config['without_mingle']
+    celery_config['broker_heartbeat'] = None if celery_config['broker_heartbeat'] <= 0 else celery_config[
+        'broker_hearhbeat']
+
+    if celery_config['task_queues'] is not None:
+        celery_config['task_queues'] = (Queue(task_name) for task_name in celery_config['task_queues'])
+
+    app.conf.update(**{k: v for k, v in celery_config.items() if v is not None})
+    return app
+
+
+class CeleryContainer(containers.DeclarativeContainer):
+    """Celery injectect values. You can crate a new application or reuse one"""
+    config = providers.Dependency(instance_of=CeleryConfig)
+    configuration = Configuration()
+    celery = providers.Callable(
+        create_client,
+        config=configuration.provided.celery
+    )
+    app = providers.Singleton(celery)
+
+
+class CeleryBundle:
+    """The celery bundle. It loads the config, container and provides the worker start method"""
     def __init__(self):
-        self.logger = logging.getLogger("celery_bundle")
-        self.worker = None
+        """We only use config and injections bindings"""
         self.config_mapping = {
-            "celery": {
-                "broker": 'pyamqp://guest@localhost//',
-                "name": "",
-                "result_backend": "",
-                "worker": True,
-                "queues":  ["celery"],
-                "task_routes": [{
-                    "pattern": None,
-                    "queue": None
-                }],
-                "task_serializer": "json",
-                "accept_content": ["json"],
-                "result_serializer": 'json',
-                "result_expires": 3600, # 1 hour
-                "timezone": 'Europe/Madrid',
-                "concurrency": 0,
-                "worker_max_tasks_per_child": -1,
-                "broker_pool_limit": 1,
-                "broker_heartbeat": 0, # Disabled, put some greater value if you network is not good
-                "broker_connection_timeout": 30,
-                "event_queue_expires": 60,
-                "worker_prefetch_multiplier": 1,
-                "quiet": True,
-                "without_gossip": True,
-                "without_mingle": True,
-                "pool": "prefork"
-            }
+            'celery': CeleryConfig
         }
 
-        self.event_listeners = [
-            (KernelReadyEvent, self.kernel_ready),
-            (KernelShutdownEvent, self.kernel_shutdown)
-        ]
-
-        self.app = Celery()
         self.injection_bindings = {
-            Celery: self.app
+            'celery': CeleryContainer
         }
 
-    @inject.params(config=Configuration)
-    def start_sever(self, config):
-        # Register mappings
-        kernel = inject.instance(Kernel)
-        for bundle in kernel.bundles:
-            if hasattr(bundle, "register_tasks"):
-                getattr(bundle, "register_tasks")()
-        tasks_per_child = config.celery.worker_max_tasks_per_child
-        if tasks_per_child == -1:
-            tasks_per_child = None
-
-        if config.celery.broker_heartbeat <= 0:
-            broker_hearthbeat = None
-        else:
-            broker_hearthbeat = config.celery.broker_heartbeat
-
-        self.app.conf.update(
-            broker_url=config.celery.broker,
-            result_backend=config.celery.result_backend,
-            task_track_started=True,
-            result_expires=config.celery.result_expires,
-            task_serializer=config.celery.task_serializer,
-            accept_content=config.celery.accept_content,  # Ignore other content
-            result_serializer=config.celery.task_serializer,
-            timezone=config.celery.timezone,
-            enable_utc=True,
-            task_acks_late=True,
-            worker_max_tasks_per_child=tasks_per_child,
-            broker_pool_limit=config.celery.broker_pool_limit,
-            broker_heartbeat=broker_hearthbeat,
-            broker_connection_timeout=config.celery.broker_connection_timeout,
-            event_queue_expires=config.celery.event_queue_expires,
-            worker_prefetch_multiplier=config.celery.worker_prefetch_multiplier
-        )
-
-        if len(config.celery.task_routes) > 0:
-            task_routes = {}
-            for route in config.celery.task_routes:
-                task_routes[route.pattern] = route.queue
-            self.app.conf.update({"task_routes": task_routes})
-
+    @staticmethod
+    def start():
+        """Parse the config and run the celery worker with the provided arguments"""
+        config = CeleryContainer.configuration()
         if config.celery.worker:
-            self.logger.info("Starting worker")
-            pool_implementation = concurrency.get_implementation(config.celery.pool)
-            params = {
-                'pool_cls': None,
-                'quiet': True,
-                'detach': False,
-                'optimization': 'default',
-                'prefetch_multiplier': 4,
-                'concurrency': config.celery.concurrency,
-                'pool': pool_implementation,
-                'task_events': True,
-                'max_tasks_per_child': None,
-                'max_memory_per_child': None,
-                'purge': False,
-                'queues': config.celery.queues,
-                'exclude_queues': [], 'include': [],
-                'without_gossip': config.celery.without_gossip,
-                'without_mingle': config.celery.without_mingle,
-                'without_heartbeat': broker_hearthbeat is None,
-                'heartbeat_interval': broker_hearthbeat,
-                'autoscale': None,
-                'umask': None,
-                'executable': None,
-                'beat': False,
-                'schedule_filename': 'celerybeat-schedule',
-                'scheduler': None
-            }
-            if len(config.celery.name) == 0:
-                config.celery.name = socket.gethostname()
+            celery_config = config.celery  # type: CeleryConfig
+            app = CeleryContainer.app()  # type: Celery
+            params = []
+            # Options
+            if celery_config.quiet:
+                params.append("--quiet")
 
-            try:
-                self.worker = self.app.Worker(hostname=f"{config.celery.name}@{socket.gethostname()}", **params)
-                self.logger.info(f"Worker started using pool type {config.celery.pool} ({pool_implementation})")
-                self.worker.start()
-            except Exception as e:
-                logging.error(e)
-                raise e
-        else:
-            self.logger.info("Running as client only")
+            # Command
+            params.append("worker")
 
-    @inject.params(kernel=Kernel)
-    def kernel_ready(self, event, kernel):
-        config = inject.instance(Configuration).celery
-        if config.worker:
-            kernel.run_service(self.start_sever)
-        else:
-            self.start_sever()
+            # Args
+            if celery_config.without_gossip:
+                params.append("--without-gossip")
 
-    def kernel_shutdown(self, event):
-        if self.worker:
-            self.logger.info("Stopping worker")
-            self.worker.stop()
-            self.logger.info("Worker has been stoped") 
+            if celery_config.broker_heartbeat == 0:
+                params.append("--without-heartbeat")
+
+            if celery_config.without_mingle:
+                params.append("--without-mingle")
+
+            if celery_config.worker_send_task_events:
+                params.append("-E")
+
+            params.append("--pool")
+            params.append(config.celery.pool)
+            logging.getLogger("celery").info("Params: %s", " ".join(params))
+            logging.getLogger("celery").info("Tasks: [[cyan]%s[/]]", ", ".join(app.conf["include"]))
+            app.start(params)
