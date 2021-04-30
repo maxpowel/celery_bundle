@@ -4,7 +4,8 @@ python:
 env:
   global:
   - PYTHONPATH="."
-script: python celery_bundle/test/test_bundle.py
+before_script: pip install poetry && poetry install
+script: poetry run pytest
 deploy:
   provider: pypi
   user: maxpowel
